@@ -1,5 +1,6 @@
+#include "draw.h"
 #include "ext-session-lock-v1-protocol.h"
-#include "shared_memory.h"
+#include "state.h"
 #include <assert.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -8,35 +9,8 @@
 #include <string.h>
 #include <sys/mman.h>
 #include <unistd.h>
-#include <wayland-client-core.h>
-#include <wayland-client-protocol.h>
 #include <wayland-client.h>
-#include <xkbcommon/xkbcommon-keysyms.h>
 #include <xkbcommon/xkbcommon.h>
-
-struct prog_state {
-	struct wl_display *display;
-	struct wl_compositor *compositor;
-	struct wl_shm *shm;
-	struct wl_shm_pool *pool;
-	struct wl_buffer *buffer;
-	struct wl_seat *seat;
-	struct wl_keyboard *keyboard;
-	struct wl_output *output;
-	//  NOTE: there can be multiple outputs each output is analogus to a
-	//  screen. On my current machine i only have one output and also for
-	//  simplicity i will only bind to one output
-
-	struct xkb_context *xkb_context;
-	struct xkb_keymap *xkb_keymap;
-	struct xkb_state *xkb_state;
-
-	struct ext_session_lock_manager_v1 *lock_manager;
-	struct ext_session_lock_v1 *session_lock;
-	struct wl_surface *surface;
-	struct ext_session_lock_surface_v1 *lock_surface;
-	uint8_t locked;
-};
 
 static void wl_keyboard_listener_keymap(void *data,
 					struct wl_keyboard *wl_keyboard,
@@ -194,7 +168,9 @@ static void reg_handle_global_remove(void *data,
 }
 
 static const struct wl_registry_listener reg_listener = {
-    .global = reg_handle_global, .global_remove = reg_handle_global_remove};
+    .global = reg_handle_global,
+    .global_remove = reg_handle_global_remove,
+};
 
 void getDisplay(struct prog_state *state) {
 	state->display = wl_display_connect(NULL);
@@ -214,40 +190,11 @@ void getDisplay(struct prog_state *state) {
 	wl_registry_destroy(registry);
 }
 
-void createBuffer(uint32_t width, uint32_t height, uint32_t stride,
-		  struct prog_state *state) {
-	size_t shm_pool_size = height * stride * 2;
-
-	int fd = allocate_shm_file(shm_pool_size);
-	uint8_t *pool_data = mmap(NULL, shm_pool_size, PROT_READ | PROT_WRITE,
-				  MAP_SHARED, fd, 0);
-	state->pool = wl_shm_create_pool(state->shm, fd, shm_pool_size);
-
-	int index = 0;
-	int offset = height * stride * index;
-	state->buffer = wl_shm_pool_create_buffer(
-	    state->pool, offset, width, height, stride, WL_SHM_FORMAT_XRGB8888);
-
-	// checker pattern
-	uint32_t *pixels = (uint32_t *)&pool_data[offset];
-	for (int y = 0; y < height; ++y) {
-		for (int x = 0; x < width; ++x) {
-			if ((x + y / 8 * 8) % 16 < 8) {
-				pixels[y * width + x] = 0xFF666666;
-			} else {
-				pixels[y * width + x] = 0xFFEEEEEE;
-			}
-		}
-	}
-
-	close(fd);
-	munmap(pool_data, shm_pool_size);
-}
-
 void lock_locked(void *data, struct ext_session_lock_v1 *ext_session_lock_v1) {
 	struct prog_state *state = data;
 	state->locked = 1;
 }
+
 void lock_finished(void *data,
 		   struct ext_session_lock_v1 *ext_session_lock_v1) {
 	fprintf(stderr, "failed to lock session\n");
