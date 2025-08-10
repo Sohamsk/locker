@@ -8,6 +8,7 @@
 #include <string.h>
 #include <sys/mman.h>
 #include <unistd.h>
+#include <wayland-client-core.h>
 #include <wayland-client-protocol.h>
 #include <wayland-client.h>
 #include <xkbcommon/xkbcommon-keysyms.h>
@@ -91,9 +92,12 @@ static void wl_keyboard_listener_key(void *data,
 
 	if (state == WL_KEYBOARD_KEY_STATE_PRESSED && sym == XKB_KEY_Escape) {
 		if (client_state->session_lock) {
-			ext_session_lock_v1_destroy(client_state->session_lock);
+			ext_session_lock_v1_unlock_and_destroy(
+			    client_state->session_lock);
 			client_state->session_lock = NULL;
 			client_state->locked = 0;
+
+			wl_display_roundtrip(client_state->display);
 		}
 	}
 }
@@ -118,7 +122,7 @@ wl_keyboard_listener_modifiers(void *data, struct wl_keyboard *wl_keyboard,
 static void wl_keyboard_listener_repeat_info(void *data,
 					     struct wl_keyboard *wl_keyboard,
 					     int32_t rate, int32_t delay) {
-	/* NOTE:Left as an exercise for the reader */
+	// noop
 }
 
 struct wl_keyboard_listener wl_keyboard_listener = {
@@ -313,11 +317,14 @@ int main() {
 	while (state.locked) {
 		if (wl_display_dispatch(state.display) < 0) {
 			fprintf(stderr, "wl_display_dispatch() failed");
-			ext_session_lock_v1_destroy(state.session_lock);
+			ext_session_lock_v1_unlock_and_destroy(
+			    state.session_lock);
 			break;
 		}
 	}
 
+	ext_session_lock_surface_v1_destroy(state.lock_surface);
+	ext_session_lock_manager_v1_destroy(state.lock_manager);
 	wl_shm_pool_destroy(state.pool);
 	wl_shm_destroy(state.shm);
 	wl_buffer_destroy(state.buffer);
