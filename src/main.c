@@ -1,3 +1,4 @@
+#include "auth.h"
 #include "draw.h"
 #include "ext-session-lock-v1-protocol.h"
 #include "state.h"
@@ -236,6 +237,10 @@ struct ext_session_lock_surface_v1_listener lock_surface_listener = {
 
 int main() {
 	struct prog_state state = {0};
+	if (init_pam(&state) != 0) {
+		fprintf(stderr, "PAM start failed!!\n");
+		exit(2);
+	}
 	state.xkb_context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
 
 	getDisplay(&state);

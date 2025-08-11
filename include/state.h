@@ -1,8 +1,22 @@
 #ifndef HEADER_STATE
 #define HEADER_STATE
+#include <security/_pam_types.h>
+#include <security/pam_appl.h>
+#include <security/pam_ext.h>
+#include <security/pam_modules.h>
 #include <stdint.h>
 #include <wayland-client.h>
 #include <xkbcommon/xkbcommon.h>
+
+struct auth_state {
+	pam_handle_t *pamh;
+	char *username;
+	char *password_buffer;
+	size_t password_len;
+	uint32_t password_pos;
+	uint32_t auth_success;
+	uint8_t waiting_for_auth;
+};
 
 struct prog_state {
 	struct wl_display *display;
@@ -26,5 +40,7 @@ struct prog_state {
 	struct wl_surface *surface;
 	struct ext_session_lock_surface_v1 *lock_surface;
 	uint8_t locked;
+
+	struct auth_state auth_state;
 };
 #endif
