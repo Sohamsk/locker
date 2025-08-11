@@ -3,6 +3,8 @@
 #include "ext-session-lock-v1-protocol.h"
 #include "state.h"
 #include <assert.h>
+#include <security/_pam_types.h>
+#include <security/pam_appl.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -10,7 +12,9 @@
 #include <string.h>
 #include <sys/mman.h>
 #include <unistd.h>
+#include <wayland-client-core.h>
 #include <wayland-client.h>
+#include <xkbcommon/xkbcommon-keysyms.h>
 #include <xkbcommon/xkbcommon.h>
 
 static void wl_keyboard_listener_keymap(void *data,
@@ -61,18 +65,51 @@ static void wl_keyboard_listener_key(void *data,
 				     uint32_t serial, uint32_t time,
 				     uint32_t key, uint32_t state) {
 	struct prog_state *client_state = data;
+	struct auth_state *auth_state = &client_state->auth_state;
 	uint32_t keycode = key + 8;
 	xkb_keysym_t sym =
 	    xkb_state_key_get_one_sym(client_state->xkb_state, keycode);
 
-	if (state == WL_KEYBOARD_KEY_STATE_PRESSED && sym == XKB_KEY_Escape) {
-		if (client_state->session_lock) {
-			ext_session_lock_v1_unlock_and_destroy(
-			    client_state->session_lock);
-			client_state->session_lock = NULL;
-			client_state->locked = 0;
+	if (state != WL_KEYBOARD_KEY_STATE_PRESSED)
+		return;
 
+	if (sym == XKB_KEY_Escape) {
+		memset(auth_state->password_buffer, 0,
+		       auth_state->password_len);
+		auth_state->password_pos = 0;
+		fprintf(stderr, "Cleared password\n");
+	} else if (sym == XKB_KEY_Return) {
+		printf("return\n");
+		if (auth_state->password_pos > 0) {
+			auth_state->password_buffer[auth_state->password_pos] =
+			    '\0';
+		}
+
+		if (authenticate_user(client_state) == 0) {
 			wl_display_roundtrip(client_state->display);
+		};
+	} else if (sym == XKB_KEY_BackSpace) {
+		fprintf(stderr, "Backspace\n");
+		if (auth_state->password_pos > 0) {
+			auth_state->password_pos--;
+			auth_state->password_buffer[auth_state->password_pos] =
+			    '\0';
+		}
+	} else {
+		char buf[8];
+
+		int len = xkb_state_key_get_utf8(client_state->xkb_state,
+						 keycode, buf, sizeof(buf));
+
+		if (len > 0 && auth_state->password_pos + len <
+				   auth_state->password_len - 1) {
+			memcpy(&auth_state
+				    ->password_buffer[auth_state->password_pos],
+			       buf, len);
+			auth_state->password_pos += len;
+		} else {
+			fprintf(stderr, "password too big for buffer or not a "
+					"typable character");
 		}
 	}
 }
@@ -240,7 +277,9 @@ int main() {
 	if (init_pam(&state) != 0) {
 		fprintf(stderr, "PAM start failed!!\n");
 		exit(2);
-	}
+	} else
+		fprintf(stderr, "Initialized PAM\n");
+
 	state.xkb_context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
 
 	getDisplay(&state);
@@ -254,7 +293,7 @@ int main() {
 
 	state.surface = wl_compositor_create_surface(state.compositor);
 	if (!state.surface) {
-		fprintf(stderr, "surface is null");
+		fprintf(stderr, "surface is null\n");
 		exit(2);
 	}
 	state.lock_surface = ext_session_lock_v1_get_lock_surface(
@@ -265,16 +304,19 @@ int main() {
 
 	wl_display_roundtrip(state.display);
 
-	fprintf(stderr, "locked: %d", state.locked);
+	fprintf(stderr, "locked: %d\n", state.locked);
 	while (state.locked) {
 		if (wl_display_dispatch(state.display) < 0) {
-			fprintf(stderr, "wl_display_dispatch() failed");
+			fprintf(stderr, "wl_display_dispatch() failed\n");
 			ext_session_lock_v1_unlock_and_destroy(
 			    state.session_lock);
 			break;
 		}
 	}
 
+	memset(state.auth_state.password_buffer, 0,
+	       state.auth_state.password_len);
+	free(state.auth_state.password_buffer);
 	ext_session_lock_surface_v1_destroy(state.lock_surface);
 	ext_session_lock_manager_v1_destroy(state.lock_manager);
 	wl_shm_pool_destroy(state.pool);
