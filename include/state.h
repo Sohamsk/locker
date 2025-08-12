@@ -10,7 +10,7 @@
 
 typedef enum {
 	AUTH_STATE_LOCKED,
-	//    ICON_STATE_AUTHENTICATING,
+	AUTH_STATE_AUTHENTICATING,
 	AUTH_STATE_SUCCESS,
 	//    ICON_STATE_FAILED,
 	AUTH_STATE_TYPING
@@ -31,6 +31,8 @@ struct prog_state {
 	struct wl_compositor *compositor;
 	struct wl_shm *shm;
 	struct wl_shm_pool *pool;
+	size_t shm_pool_size;
+	uint8_t *pool_data;
 	struct wl_buffer *buffer;
 	struct wl_seat *seat;
 	struct wl_keyboard *keyboard;
@@ -38,6 +40,8 @@ struct prog_state {
 	struct wl_output *output;
 	uint32_t physical_width;
 	uint32_t physical_height;
+	uint32_t logical_width;
+	uint32_t logical_height;
 	//  NOTE: there can be multiple outputs each output is analogus to a
 	//  screen. On my current machine i only have one output and also for
 	//  simplicity i will only bind to one output
