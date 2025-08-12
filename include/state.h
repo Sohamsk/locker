@@ -8,6 +8,14 @@
 #include <wayland-client.h>
 #include <xkbcommon/xkbcommon.h>
 
+typedef enum {
+	AUTH_STATE_LOCKED,
+	AUTH_STATE_AUTHENTICATING,
+	AUTH_STATE_SUCCESS,
+	//    ICON_STATE_FAILED,
+	AUTH_STATE_TYPING
+} auth_state_t;
+
 struct auth_state {
 	pam_handle_t *pamh;
 	char *username;
@@ -15,7 +23,7 @@ struct auth_state {
 	size_t password_len;
 	uint32_t password_pos;
 	uint32_t auth_success;
-	uint8_t waiting_for_auth;
+	auth_state_t current_state;
 };
 
 struct prog_state {
@@ -23,10 +31,15 @@ struct prog_state {
 	struct wl_compositor *compositor;
 	struct wl_shm *shm;
 	struct wl_shm_pool *pool;
+	size_t shm_pool_size;
+	uint8_t *pool_data;
 	struct wl_buffer *buffer;
 	struct wl_seat *seat;
 	struct wl_keyboard *keyboard;
+
 	struct wl_output *output;
+	uint32_t logical_width;
+	uint32_t logical_height;
 	//  NOTE: there can be multiple outputs each output is analogus to a
 	//  screen. On my current machine i only have one output and also for
 	//  simplicity i will only bind to one output

@@ -11,11 +11,35 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
+#include <time.h>
 #include <unistd.h>
 #include <wayland-client-core.h>
+#include <wayland-client-protocol.h>
 #include <wayland-client.h>
 #include <xkbcommon/xkbcommon-keysyms.h>
 #include <xkbcommon/xkbcommon.h>
+
+static void output_geometry(void *data, struct wl_output *wl_output, int32_t x,
+			    int32_t y, int32_t physical_width,
+			    int32_t physical_height, int32_t subpixel,
+			    const char *make, const char *model,
+			    int32_t transform) {
+	fprintf(stderr, "Physical screen widthxheight: %dx%d mm\n",
+		physical_width, physical_height);
+}
+
+static void output_mode(void *data, struct wl_output *wl_output, uint32_t flags,
+			int32_t width, int32_t height, int32_t refresh) {
+	if (flags & WL_OUTPUT_MODE_CURRENT) {
+		fprintf(stderr, "Screen resolution: %dx%d pixels\n", width,
+			height);
+	}
+}
+
+static const struct wl_output_listener output_listener = {
+    .geometry = output_geometry,
+    .mode = output_mode,
+};
 
 static void wl_keyboard_listener_keymap(void *data,
 					struct wl_keyboard *wl_keyboard,
@@ -45,19 +69,7 @@ static void wl_keyboard_listener_enter(void *data,
 				       uint32_t serial,
 				       struct wl_surface *surface,
 				       struct wl_array *keys) {
-	struct prog_state *client_state = data;
-	fprintf(stderr, "keyboard enter; keys pressed are:\n");
-	uint32_t *key;
-	wl_array_for_each(key, keys) {
-		char buf[128];
-		xkb_keysym_t sym = xkb_state_key_get_one_sym(
-		    client_state->xkb_state, *key + 8);
-		xkb_keysym_get_name(sym, buf, sizeof(buf));
-		fprintf(stderr, "sym: %-12s (%d), ", buf, sym);
-		xkb_state_key_get_utf8(client_state->xkb_state, *key + 8, buf,
-				       sizeof(buf));
-		fprintf(stderr, "utf8: '%s'\n", buf);
-	}
+	//  NOTE: noop
 }
 
 static void wl_keyboard_listener_key(void *data,
@@ -74,28 +86,49 @@ static void wl_keyboard_listener_key(void *data,
 		return;
 
 	if (sym == XKB_KEY_Escape) {
+		change_icon_state(client_state, AUTH_STATE_LOCKED);
 		memset(auth_state->password_buffer, 0,
 		       auth_state->password_len);
 		auth_state->password_pos = 0;
-		fprintf(stderr, "Cleared password\n");
 	} else if (sym == XKB_KEY_Return) {
-		printf("return\n");
+		change_icon_state(client_state, AUTH_STATE_AUTHENTICATING);
+		wl_display_flush(client_state->display);
+		wl_display_roundtrip(client_state->display);
 		if (auth_state->password_pos > 0) {
 			auth_state->password_buffer[auth_state->password_pos] =
 			    '\0';
 		}
-
 		if (authenticate_user(client_state) == 0) {
+			change_icon_state(client_state, AUTH_STATE_SUCCESS);
+			wl_display_flush(client_state->display);
 			wl_display_roundtrip(client_state->display);
-		};
+			struct timespec delay = {
+			    .tv_nsec = 5.0e8,
+			};
+			nanosleep(&delay, NULL);
+			ext_session_lock_v1_unlock_and_destroy(
+			    client_state->session_lock);
+			client_state->session_lock = NULL;
+			client_state->locked = 0;
+			auth_state->auth_success = 1;
+			wl_display_roundtrip(client_state->display);
+		} else {
+			change_icon_state(client_state, AUTH_STATE_LOCKED);
+			memset(auth_state->password_buffer, 0,
+			       auth_state->password_len);
+			auth_state->password_pos = 0;
+		}
 	} else if (sym == XKB_KEY_BackSpace) {
-		fprintf(stderr, "Backspace\n");
 		if (auth_state->password_pos > 0) {
 			auth_state->password_pos--;
 			auth_state->password_buffer[auth_state->password_pos] =
 			    '\0';
 		}
+		if (auth_state->password_pos == 0) {
+			change_icon_state(client_state, AUTH_STATE_LOCKED);
+		}
 	} else {
+		change_icon_state(client_state, AUTH_STATE_TYPING);
 		char buf[8];
 
 		int len = xkb_state_key_get_utf8(client_state->xkb_state,
@@ -107,9 +140,6 @@ static void wl_keyboard_listener_key(void *data,
 				    ->password_buffer[auth_state->password_pos],
 			       buf, len);
 			auth_state->password_pos += len;
-		} else {
-			fprintf(stderr, "password too big for buffer or not a "
-					"typable character");
 		}
 	}
 }
@@ -118,7 +148,7 @@ static void wl_keyboard_listener_leave(void *data,
 				       struct wl_keyboard *wl_keyboard,
 				       uint32_t serial,
 				       struct wl_surface *surface) {
-	fprintf(stderr, "keyboard leave\n");
+	//  NOTE: noop
 }
 
 static void
@@ -193,7 +223,8 @@ static void reg_handle_global(void *data, struct wl_registry *wl_registry,
 		wl_seat_add_listener(state->seat, &wl_seat_listener, state);
 	} else if (strcmp(interface, wl_output_interface.name) == 0) {
 		state->output = wl_registry_bind(wl_registry, name,
-						 &wl_output_interface, 4);
+						 &wl_output_interface, 1);
+		wl_output_add_listener(state->output, &output_listener, state);
 	}
 	// printf("Interface: %s,\n version: %d,\n name: %d\n", interface,
 	// version, name);
@@ -243,6 +274,7 @@ struct ext_session_lock_v1_listener lock_listener = {
     .locked = lock_locked,
     .finished = lock_finished,
 };
+
 void lock_surface_configure(
     void *data, struct ext_session_lock_surface_v1 *ext_session_lock_surface_v1,
     uint32_t serial, uint32_t width, uint32_t height) {
@@ -251,6 +283,9 @@ void lock_surface_configure(
 	struct prog_state *state = data;
 
 	uint32_t stride = width * 4;
+
+	state->logical_width = width;
+	state->logical_height = height;
 
 	if (!state->buffer) {
 		createBuffer(width, height, stride, state);
@@ -274,11 +309,11 @@ struct ext_session_lock_surface_v1_listener lock_surface_listener = {
 
 int main() {
 	struct prog_state state = {0};
+	state.auth_state.current_state = AUTH_STATE_LOCKED;
 	if (init_pam(&state) != 0) {
 		fprintf(stderr, "PAM start failed!!\n");
 		exit(2);
-	} else
-		fprintf(stderr, "Initialized PAM\n");
+	}
 
 	state.xkb_context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
 
@@ -304,7 +339,6 @@ int main() {
 
 	wl_display_roundtrip(state.display);
 
-	fprintf(stderr, "locked: %d\n", state.locked);
 	while (state.locked) {
 		if (wl_display_dispatch(state.display) < 0) {
 			fprintf(stderr, "wl_display_dispatch() failed\n");
@@ -314,17 +348,27 @@ int main() {
 		}
 	}
 
+	//  NOTE: Clear all memory maybe make a function to clean shit when
+	//  exiting
 	memset(state.auth_state.password_buffer, 0,
 	       state.auth_state.password_len);
 	free(state.auth_state.password_buffer);
 	ext_session_lock_surface_v1_destroy(state.lock_surface);
 	ext_session_lock_manager_v1_destroy(state.lock_manager);
+	munmap(state.pool_data, state.shm_pool_size);
 	wl_shm_pool_destroy(state.pool);
 	wl_shm_destroy(state.shm);
 	wl_buffer_destroy(state.buffer);
 	wl_surface_destroy(state.surface);
 	wl_compositor_destroy(state.compositor);
 	wl_display_disconnect(state.display);
+
+	printf("AUTH_STATE_LOCKED: %d\n"
+	       "AUTH_STATE_AUTHENTICATING: %d\n"
+	       "AUTH_STATE_SUCCESS: %d\n"
+	       "AUTH_STATE_TYPING: %d\n",
+	       AUTH_STATE_LOCKED, AUTH_STATE_AUTHENTICATING, AUTH_STATE_SUCCESS,
+	       AUTH_STATE_TYPING);
 
 	return 0;
 }
