@@ -57,8 +57,8 @@ static void drawImage(uint32_t logical_width, uint32_t logical_height,
 
 	double x =
 	    physical_width / 2.0 - (extents.width / 2.0 + extents.x_bearing);
-	double y =
-	    physical_height / 2.0 - (extents.height / 2.0 + extents.y_bearing);
+	double y = physical_height / 2.0 -
+		   (extents.height / 2.0 + extents.y_bearing) + 200;
 
 	cairo_move_to(cr, x, y);
 	cairo_show_text(cr, text);

@@ -8,6 +8,14 @@
 #include <wayland-client.h>
 #include <xkbcommon/xkbcommon.h>
 
+typedef enum {
+	AUTH_STATE_LOCKED,
+	//    ICON_STATE_AUTHENTICATING,
+	AUTH_STATE_SUCCESS,
+	//    ICON_STATE_FAILED,
+	AUTH_STATE_TYPING
+} auth_state_t;
+
 struct auth_state {
 	pam_handle_t *pamh;
 	char *username;
@@ -15,7 +23,7 @@ struct auth_state {
 	size_t password_len;
 	uint32_t password_pos;
 	uint32_t auth_success;
-	uint8_t waiting_for_auth;
+	auth_state_t current_state;
 };
 
 struct prog_state {
