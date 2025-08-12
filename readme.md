@@ -12,7 +12,7 @@ A lightweight, secure screen locker for Wayland compositors with visual authenti
 *This has only been used on my system that runs arch, so if you need something else change is welcome.*
 ### Arch Linux
 ```
-sudo pacman -S --needed wayland pam libxkbcommon cairo meson
+sudo pacman -S --needed wayland pam libxkbcommon cairo ttf-jetbrains-mono-nerd ninja meson 
 meson setup build
 ninja -C build
 ```
