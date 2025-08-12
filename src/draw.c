@@ -35,9 +35,9 @@ static void drawLock(struct prog_state *state, cairo_t *cr) {
 
 	cairo_text_extents(cr, text, &extents);
 
-	double x = state->physical_width / 2.0 -
+	double x = state->logical_width / 2.0 -
 		   (extents.width / 2.0 + extents.x_bearing);
-	double y = state->physical_height / 2.0 -
+	double y = state->logical_height / 2.0 -
 		   (extents.height / 2.0 + extents.y_bearing) + 200;
 
 	cairo_move_to(cr, x, y);
@@ -55,7 +55,7 @@ static void drawImage(struct prog_state *state, uint32_t logical_width,
 
 	//  TODO: i need to pass the wallpaper path as a command line input. ( i
 	//  can put the path in the prog_state)
-	if (wordexp("~/Pictures/lock_screen.png", &result,
+	if (wordexp("~/Pictures/lockscreen.png", &result,
 		    WRDE_NOCMD | WRDE_SHOWERR) == 0) {
 		image = cairo_image_surface_create_from_png(result.we_wordv[0]);
 	}
@@ -72,7 +72,7 @@ static void drawImage(struct prog_state *state, uint32_t logical_width,
 		cairo_scale(cr, scale_x, scale_y);
 		cairo_set_source_surface(cr, image, 0, 0);
 		cairo_paint(cr);
-		//		cairo_restore(cr);
+		cairo_restore(cr);
 	} else {
 		fprintf(stderr, "failed to get lock_screen wallpaper\n");
 		cairo_set_source_rgb(cr, 0.2, 0.2, 0.2);

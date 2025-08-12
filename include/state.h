@@ -38,8 +38,6 @@ struct prog_state {
 	struct wl_keyboard *keyboard;
 
 	struct wl_output *output;
-	uint32_t physical_width;
-	uint32_t physical_height;
 	uint32_t logical_width;
 	uint32_t logical_height;
 	//  NOTE: there can be multiple outputs each output is analogus to a

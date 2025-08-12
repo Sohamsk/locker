@@ -30,10 +30,7 @@ static void output_geometry(void *data, struct wl_output *wl_output, int32_t x,
 
 static void output_mode(void *data, struct wl_output *wl_output, uint32_t flags,
 			int32_t width, int32_t height, int32_t refresh) {
-	struct prog_state *output = data;
 	if (flags & WL_OUTPUT_MODE_CURRENT) {
-		output->physical_width = width;
-		output->physical_height = height;
 		fprintf(stderr, "Screen resolution: %dx%d pixels\n", width,
 			height);
 	}
