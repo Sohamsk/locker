@@ -4,7 +4,6 @@ A lightweight, secure screen locker for Wayland compositors with visual authenti
 ## Features
 + Wayland Native: Built using the ext-session-lock-v1 protocol for secure screen locking
 + Visual Feedback: Dynamic icon states that change based on authentication progress
-+ Custom Fonts: Support for Nerd Fonts with Unicode icons
 + Cairo Graphics: High-quality text and icon rendering with anti-aliasing
 + PAM Authentication: Secure user authentication using the system's PAM stack
 
