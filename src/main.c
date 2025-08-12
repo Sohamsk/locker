@@ -13,9 +13,35 @@
 #include <sys/mman.h>
 #include <unistd.h>
 #include <wayland-client-core.h>
+#include <wayland-client-protocol.h>
 #include <wayland-client.h>
 #include <xkbcommon/xkbcommon-keysyms.h>
 #include <xkbcommon/xkbcommon.h>
+
+static void output_geometry(void *data, struct wl_output *wl_output, int32_t x,
+			    int32_t y, int32_t physical_width,
+			    int32_t physical_height, int32_t subpixel,
+			    const char *make, const char *model,
+			    int32_t transform) {
+	fprintf(stderr, "Physical screen widthxheight: %dx%d mm\n",
+		physical_width, physical_height);
+}
+
+static void output_mode(void *data, struct wl_output *wl_output, uint32_t flags,
+			int32_t width, int32_t height, int32_t refresh) {
+	struct prog_state *output = data;
+	if (flags & WL_OUTPUT_MODE_CURRENT) {
+		output->physical_width = width;
+		output->physical_height = height;
+		fprintf(stderr, "Screen resolution: %dx%d pixels\n", width,
+			height);
+	}
+}
+
+static const struct wl_output_listener output_listener = {
+    .geometry = output_geometry,
+    .mode = output_mode,
+};
 
 static void wl_keyboard_listener_keymap(void *data,
 					struct wl_keyboard *wl_keyboard,
@@ -79,15 +105,22 @@ static void wl_keyboard_listener_key(void *data,
 		auth_state->password_pos = 0;
 		fprintf(stderr, "Cleared password\n");
 	} else if (sym == XKB_KEY_Return) {
-		printf("return\n");
+		fprintf(stderr, "return\n");
 		if (auth_state->password_pos > 0) {
 			auth_state->password_buffer[auth_state->password_pos] =
 			    '\0';
 		}
-
 		if (authenticate_user(client_state) == 0) {
+			ext_session_lock_v1_unlock_and_destroy(
+			    client_state->session_lock);
+			client_state->session_lock = NULL;
+			client_state->locked = 0;
+			auth_state->auth_success = 1;
 			wl_display_roundtrip(client_state->display);
 		};
+		memset(auth_state->password_buffer, 0,
+		       auth_state->password_len);
+		auth_state->password_pos = 0;
 	} else if (sym == XKB_KEY_BackSpace) {
 		fprintf(stderr, "Backspace\n");
 		if (auth_state->password_pos > 0) {
@@ -109,7 +142,7 @@ static void wl_keyboard_listener_key(void *data,
 			auth_state->password_pos += len;
 		} else {
 			fprintf(stderr, "password too big for buffer or not a "
-					"typable character");
+					"typable character\n");
 		}
 	}
 }
@@ -193,7 +226,8 @@ static void reg_handle_global(void *data, struct wl_registry *wl_registry,
 		wl_seat_add_listener(state->seat, &wl_seat_listener, state);
 	} else if (strcmp(interface, wl_output_interface.name) == 0) {
 		state->output = wl_registry_bind(wl_registry, name,
-						 &wl_output_interface, 4);
+						 &wl_output_interface, 1);
+		wl_output_add_listener(state->output, &output_listener, state);
 	}
 	// printf("Interface: %s,\n version: %d,\n name: %d\n", interface,
 	// version, name);
@@ -243,6 +277,7 @@ struct ext_session_lock_v1_listener lock_listener = {
     .locked = lock_locked,
     .finished = lock_finished,
 };
+
 void lock_surface_configure(
     void *data, struct ext_session_lock_surface_v1 *ext_session_lock_surface_v1,
     uint32_t serial, uint32_t width, uint32_t height) {
@@ -314,6 +349,8 @@ int main() {
 		}
 	}
 
+	//  NOTE: Clear all memory maybe make a function to clean shit when
+	//  exiting
 	memset(state.auth_state.password_buffer, 0,
 	       state.auth_state.password_len);
 	free(state.auth_state.password_buffer);

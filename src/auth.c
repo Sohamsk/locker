@@ -1,4 +1,3 @@
-#include "ext-session-lock-v1-protocol.h"
 #include "state.h"
 #include <security/_pam_types.h>
 #include <security/pam_appl.h>
@@ -90,11 +89,6 @@ int authenticate_user(struct prog_state *state) {
 		if (ret == PAM_SUCCESS) {
 			fprintf(stderr,
 				"Verified everything auth successful\n");
-			ext_session_lock_v1_unlock_and_destroy(
-			    state->session_lock);
-			state->session_lock = NULL;
-			state->locked = 0;
-			auth_state->auth_success = 1;
 		} else {
 			fprintf(stderr, "account verification failed\n");
 			return -1;

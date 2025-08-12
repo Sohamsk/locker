@@ -8,10 +8,11 @@
 #include <wayland-client-protocol.h>
 #include <wordexp.h>
 
-static void drawImage(uint32_t width, uint32_t height, uint32_t stride,
-		      void *pixels) {
+static void drawImage(uint32_t logical_width, uint32_t logical_height,
+		      uint32_t physical_width, uint32_t physical_height,
+		      uint32_t stride, void *pixels) {
 	cairo_surface_t *cairo_surface = cairo_image_surface_create_for_data(
-	    pixels, CAIRO_FORMAT_ARGB32, width, height, stride);
+	    pixels, CAIRO_FORMAT_ARGB32, logical_width, logical_height, stride);
 
 	cairo_t *cr = cairo_create(cairo_surface);
 	cairo_surface_t *image = NULL;
@@ -29,19 +30,39 @@ static void drawImage(uint32_t width, uint32_t height, uint32_t stride,
 		uint32_t img_width = cairo_image_surface_get_width(image);
 		uint32_t img_height = cairo_image_surface_get_height(image);
 
-		double scale_x = (double)width / img_width;
-		double scale_y = (double)height / img_height;
+		double scale_x = (double)logical_width / img_width;
+		double scale_y = (double)logical_height / img_height;
 
 		cairo_save(cr);
 		cairo_scale(cr, scale_x, scale_y);
 		cairo_set_source_surface(cr, image, 0, 0);
 		cairo_paint(cr);
-		cairo_restore(cr);
+		//		cairo_restore(cr);
 	} else {
 		fprintf(stderr, "failed to get lock_screen wallpaper\n");
 		cairo_set_source_rgb(cr, 0.2, 0.2, 0.2);
 		cairo_paint(cr);
 	}
+
+	// draw text
+	char *text = "";
+	cairo_text_extents_t extents;
+
+	cairo_set_source_rgb(cr, 0, 0, 0);
+	cairo_select_font_face(cr, "JetBrainsMono Nerd Font",
+			       CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
+	cairo_set_font_size(cr, 50);
+
+	cairo_text_extents(cr, text, &extents);
+
+	double x =
+	    physical_width / 2.0 - (extents.width / 2.0 + extents.x_bearing);
+	double y =
+	    physical_height / 2.0 - (extents.height / 2.0 + extents.y_bearing);
+
+	cairo_move_to(cr, x, y);
+	cairo_show_text(cr, text);
+	// end text
 
 	cairo_surface_destroy(image);
 	cairo_destroy(cr);
@@ -57,13 +78,16 @@ void createBuffer(uint32_t width, uint32_t height, uint32_t stride,
 				  MAP_SHARED, fd, 0);
 	state->pool = wl_shm_create_pool(state->shm, fd, shm_pool_size);
 
+	fprintf(stderr, "width: %d, height: %d\n", width, height);
+
 	int index = 0;
 	int offset = height * stride * index;
 	state->buffer = wl_shm_pool_create_buffer(
 	    state->pool, offset, width, height, stride, WL_SHM_FORMAT_ARGB8888);
 
 	uint32_t *pixels = (uint32_t *)&pool_data[offset];
-	drawImage(width, height, stride, pixels);
+	drawImage(width, height, state->physical_width, state->physical_height,
+		  stride, pixels);
 
 	close(fd);
 	munmap(pool_data, shm_pool_size);

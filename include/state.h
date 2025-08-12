@@ -26,7 +26,10 @@ struct prog_state {
 	struct wl_buffer *buffer;
 	struct wl_seat *seat;
 	struct wl_keyboard *keyboard;
+
 	struct wl_output *output;
+	uint32_t physical_width;
+	uint32_t physical_height;
 	//  NOTE: there can be multiple outputs each output is analogus to a
 	//  screen. On my current machine i only have one output and also for
 	//  simplicity i will only bind to one output
