@@ -4,7 +4,10 @@
 #include <security/pam_appl.h>
 #include <security/pam_ext.h>
 #include <security/pam_modules.h>
+#include <stdbool.h>
 #include <stdint.h>
+#include <time.h>
+#include <wayland-client-protocol.h>
 #include <wayland-client.h>
 #include <xkbcommon/xkbcommon.h>
 
@@ -22,7 +25,6 @@ struct auth_state {
 	char *password_buffer;
 	size_t password_len;
 	uint32_t password_pos;
-	uint32_t auth_success;
 	auth_state_t current_state;
 };
 
@@ -44,16 +46,25 @@ struct prog_state {
 	//  screen. On my current machine i only have one output and also for
 	//  simplicity i will only bind to one output
 
+	// keyboard stuff
 	struct xkb_context *xkb_context;
 	struct xkb_keymap *xkb_keymap;
 	struct xkb_state *xkb_state;
 
+	// lock stuff
 	struct ext_session_lock_manager_v1 *lock_manager;
 	struct ext_session_lock_v1 *session_lock;
 	struct wl_surface *surface;
 	struct ext_session_lock_surface_v1 *lock_surface;
-	uint8_t locked;
+	bool locked;
 
+	// auth state
 	struct auth_state auth_state;
+
+	// decay_state
+	struct wl_callback *decay_callback;
+	uint32_t decay_interval;
+	struct timespec last_activity;
+	bool decay_enabled;
 };
 #endif

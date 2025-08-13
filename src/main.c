@@ -3,8 +3,10 @@
 #include "ext-session-lock-v1-protocol.h"
 #include "state.h"
 #include <assert.h>
+#include <bits/time.h>
 #include <security/_pam_types.h>
 #include <security/pam_appl.h>
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -72,6 +74,15 @@ static void wl_keyboard_listener_enter(void *data,
 	//  NOTE: noop
 }
 
+void update_last_activity(struct prog_state *state) {
+	clock_gettime(CLOCK_MONOTONIC, &state->last_activity);
+}
+
+void clearPasswordBuffer(struct auth_state *auth_state) {
+	memset(auth_state->password_buffer, 0, auth_state->password_len);
+	auth_state->password_pos = 0;
+}
+
 static void wl_keyboard_listener_key(void *data,
 				     struct wl_keyboard *wl_keyboard,
 				     uint32_t serial, uint32_t time,
@@ -87,9 +98,7 @@ static void wl_keyboard_listener_key(void *data,
 
 	if (sym == XKB_KEY_Escape) {
 		change_icon_state(client_state, AUTH_STATE_LOCKED);
-		memset(auth_state->password_buffer, 0,
-		       auth_state->password_len);
-		auth_state->password_pos = 0;
+		clearPasswordBuffer(auth_state);
 	} else if (sym == XKB_KEY_Return) {
 		change_icon_state(client_state, AUTH_STATE_AUTHENTICATING);
 		wl_display_flush(client_state->display);
@@ -109,14 +118,11 @@ static void wl_keyboard_listener_key(void *data,
 			ext_session_lock_v1_unlock_and_destroy(
 			    client_state->session_lock);
 			client_state->session_lock = NULL;
-			client_state->locked = 0;
-			auth_state->auth_success = 1;
+			client_state->locked = false;
 			wl_display_roundtrip(client_state->display);
 		} else {
 			change_icon_state(client_state, AUTH_STATE_LOCKED);
-			memset(auth_state->password_buffer, 0,
-			       auth_state->password_len);
-			auth_state->password_pos = 0;
+			clearPasswordBuffer(auth_state);
 		}
 	} else if (sym == XKB_KEY_BackSpace) {
 		if (auth_state->password_pos > 0) {
@@ -127,6 +133,7 @@ static void wl_keyboard_listener_key(void *data,
 		if (auth_state->password_pos == 0) {
 			change_icon_state(client_state, AUTH_STATE_LOCKED);
 		}
+		update_last_activity(client_state);
 	} else {
 		change_icon_state(client_state, AUTH_STATE_TYPING);
 		char buf[8];
@@ -136,6 +143,7 @@ static void wl_keyboard_listener_key(void *data,
 
 		if (len > 0 && auth_state->password_pos + len <
 				   auth_state->password_len - 1) {
+			update_last_activity(client_state);
 			memcpy(&auth_state
 				    ->password_buffer[auth_state->password_pos],
 			       buf, len);
@@ -261,7 +269,7 @@ void getDisplay(struct prog_state *state) {
 
 void lock_locked(void *data, struct ext_session_lock_v1 *ext_session_lock_v1) {
 	struct prog_state *state = data;
-	state->locked = 1;
+	state->locked = true;
 }
 
 void lock_finished(void *data,
@@ -306,10 +314,57 @@ void lock_surface_configure(
 struct ext_session_lock_surface_v1_listener lock_surface_listener = {
     .configure = lock_surface_configure,
 };
+void decay_to_locked(struct prog_state *state) {
+	fprintf(stderr, "Decaying state\n");
+	clearPasswordBuffer(&state->auth_state);
+	change_icon_state(state, AUTH_STATE_LOCKED);
+}
+
+bool should_decay_state(struct prog_state *state) {
+	if (state->auth_state.current_state == AUTH_STATE_LOCKED) {
+		return false;
+	}
+
+	struct timespec current;
+	clock_gettime(CLOCK_MONOTONIC, &current);
+	int32_t elapsed =
+	    (current.tv_sec + current.tv_nsec * 1e-9) -
+	    (state->last_activity.tv_sec + state->last_activity.tv_nsec * 1e-9);
+	elapsed = abs(elapsed);
+
+	if (elapsed < state->decay_interval) {
+		return false;
+	}
+
+	return true;
+}
+
+void decay_timer_callback(void *data, struct wl_callback *wl_callback,
+			  uint32_t callback_data);
+
+const struct wl_callback_listener decay_callback_listener = {
+    .done = decay_timer_callback,
+};
+
+void decay_timer_callback(void *data, struct wl_callback *wl_callback,
+			  uint32_t callback_data) {
+	struct prog_state *state = (struct prog_state *)data;
+	if (wl_callback) {
+		wl_callback_destroy(wl_callback);
+	}
+	if (should_decay_state(state)) {
+		decay_to_locked(state);
+	}
+	state->decay_callback = wl_display_sync(state->display);
+	wl_callback_add_listener(state->decay_callback,
+				 &decay_callback_listener, state);
+}
 
 int main() {
 	struct prog_state state = {0};
+	state.decay_enabled = true;
 	state.auth_state.current_state = AUTH_STATE_LOCKED;
+	state.decay_interval = 10;
 	if (init_pam(&state) != 0) {
 		fprintf(stderr, "PAM start failed!!\n");
 		exit(2);
@@ -337,6 +392,12 @@ int main() {
 	    state.lock_surface, &lock_surface_listener, &state);
 	// wl_surface_commit(state.surface);
 
+	if (state.decay_enabled) {
+		state.decay_callback = wl_display_sync(state.display);
+		wl_callback_add_listener(state.decay_callback,
+					 &decay_callback_listener, &state);
+	}
+
 	wl_display_roundtrip(state.display);
 
 	while (state.locked) {
@@ -350,9 +411,7 @@ int main() {
 
 	//  NOTE: Clear all memory maybe make a function to clean shit when
 	//  exiting
-	memset(state.auth_state.password_buffer, 0,
-	       state.auth_state.password_len);
-	free(state.auth_state.password_buffer);
+	clearPasswordBuffer(&state.auth_state);
 	ext_session_lock_surface_v1_destroy(state.lock_surface);
 	ext_session_lock_manager_v1_destroy(state.lock_manager);
 	munmap(state.pool_data, state.shm_pool_size);
@@ -363,12 +422,13 @@ int main() {
 	wl_compositor_destroy(state.compositor);
 	wl_display_disconnect(state.display);
 
-	printf("AUTH_STATE_LOCKED: %d\n"
-	       "AUTH_STATE_AUTHENTICATING: %d\n"
-	       "AUTH_STATE_SUCCESS: %d\n"
-	       "AUTH_STATE_TYPING: %d\n",
-	       AUTH_STATE_LOCKED, AUTH_STATE_AUTHENTICATING, AUTH_STATE_SUCCESS,
-	       AUTH_STATE_TYPING);
+	fprintf(stderr,
+		"AUTH_STATE_LOCKED: %d\n"
+		"AUTH_STATE_AUTHENTICATING: %d\n"
+		"AUTH_STATE_SUCCESS: %d\n"
+		"AUTH_STATE_TYPING: %d\n",
+		AUTH_STATE_LOCKED, AUTH_STATE_AUTHENTICATING,
+		AUTH_STATE_SUCCESS, AUTH_STATE_TYPING);
 
 	return 0;
 }
