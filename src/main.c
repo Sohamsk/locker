@@ -2,6 +2,7 @@
 #include "draw.h"
 #include "ext-session-lock-v1-protocol.h"
 #include "state.h"
+#include "tomlc17.h"
 #include <assert.h>
 #include <bits/time.h>
 #include <security/_pam_types.h>
@@ -362,6 +363,16 @@ void decay_timer_callback(void *data, struct wl_callback *wl_callback,
 
 int main() {
 	struct prog_state state = {0};
+	char *toml_test = "[server]\n"
+			  "host = \"www.example.com\"\n"
+			  "port = [8080, 8181, 8282]\n";
+
+	toml_result_t result = toml_parse(toml_test, strlen(toml_test));
+
+	toml_datum_t host = toml_seek(result.toptab, "server.host");
+
+	fprintf(stderr, "testing toml: %s\n", host.u.s);
+
 	state.decay_enabled = true;
 	state.auth_state.current_state = AUTH_STATE_LOCKED;
 	state.decay_interval = 10;

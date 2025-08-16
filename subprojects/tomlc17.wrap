@@ -1,0 +1,9 @@
+[wrap-file]
+directory = tomlc17-R250712
+source_url = https://github.com/cktan/tomlc17/archive/refs/tags/R250712.tar.gz
+source_filename = tomlc17-R250712.tar.gz
+source_hash = 5abb8b1dd4aed0ad1aade68ec884ca9034f93f7ea6042654112fe0120c717679
+patch_directory = tomlc17
+
+[provide]
+tomlc17 = tomlc17_dep

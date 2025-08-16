@@ -1,3 +1,8 @@
 .cache/
 build/
 *.log
+
+subprojects/*
+!subprojects/*.wrap
+!subprojects/packagefiles/
+!subprojects/packagefiles/**

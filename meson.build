@@ -12,8 +12,9 @@ wayland_client_dep = dependency('wayland-client', required:true)
 pam_dep = dependency('pam', required: true)
 libxkbcommon_dep = dependency('xkbcommon', required: true)
 cairo_dep = dependency('cairo', required: true)
+tomlc17_dep = dependency('tomlc17', fallback : ['tomlc17', 'tomlc17_dep'])
 
-deps = [wayland_client_dep, libxkbcommon_dep, cairo_dep, pam_dep]
+deps = [wayland_client_dep, libxkbcommon_dep, cairo_dep, pam_dep, tomlc17_dep]
 
 src_files = files(
   src_dir / 'main.c',
