@@ -1,4 +1,5 @@
 #include "auth.h"
+#include "config.h"
 #include "draw.h"
 #include "ext-session-lock-v1-protocol.h"
 #include "state.h"
@@ -363,19 +364,9 @@ void decay_timer_callback(void *data, struct wl_callback *wl_callback,
 
 int main() {
 	struct prog_state state = {0};
-	char *toml_test = "[server]\n"
-			  "host = \"www.example.com\"\n"
-			  "port = [8080, 8181, 8282]\n";
 
-	toml_result_t result = toml_parse(toml_test, strlen(toml_test));
+	readOrDefaultConfig("/home/sohamkd/dev/locker/config.toml", &state);
 
-	toml_datum_t host = toml_seek(result.toptab, "server.host");
-
-	fprintf(stderr, "testing toml: %s\n", host.u.s);
-
-	state.decay_enabled = true;
-	state.auth_state.current_state = AUTH_STATE_LOCKED;
-	state.decay_interval = 10;
 	if (init_pam(&state) != 0) {
 		fprintf(stderr, "PAM start failed!!\n");
 		exit(2);
@@ -432,14 +423,6 @@ int main() {
 	wl_surface_destroy(state.surface);
 	wl_compositor_destroy(state.compositor);
 	wl_display_disconnect(state.display);
-
-	fprintf(stderr,
-		"AUTH_STATE_LOCKED: %d\n"
-		"AUTH_STATE_AUTHENTICATING: %d\n"
-		"AUTH_STATE_SUCCESS: %d\n"
-		"AUTH_STATE_TYPING: %d\n",
-		AUTH_STATE_LOCKED, AUTH_STATE_AUTHENTICATING,
-		AUTH_STATE_SUCCESS, AUTH_STATE_TYPING);
 
 	return 0;
 }

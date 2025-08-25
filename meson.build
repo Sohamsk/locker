@@ -21,6 +21,7 @@ src_files = files(
   src_dir / 'shm.c',
   src_dir / 'draw.c',
   src_dir / 'auth.c',
+  src_dir / 'config.c',
   src_dir / 'ext-session-lock-v1-protocol.c'
 )
 

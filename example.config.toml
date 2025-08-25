@@ -1,0 +1,6 @@
+[auth]
+decay_enabled = true    # enables the decay of the states to the locked state
+decay_interval = 10     # specifies the time the machine takes before decaying state[seconds]
+
+[wallpaper]
+path = "/home/sohamkd/Pictures/lock_screen.png"     # path to wallpaper

@@ -66,5 +66,8 @@ struct prog_state {
 	uint32_t decay_interval;
 	struct timespec last_activity;
 	bool decay_enabled;
+
+	// wallpaper
+	char *wallpaper_path;
 };
 #endif

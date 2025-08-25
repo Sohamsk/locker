@@ -55,7 +55,7 @@ static void drawImage(struct prog_state *state, uint32_t logical_width,
 
 	//  TODO: i need to pass the wallpaper path as a command line input. ( i
 	//  can put the path in the prog_state)
-	if (wordexp("~/Pictures/lockscreen.png", &result,
+	if (wordexp(state->wallpaper_path, &result,
 		    WRDE_NOCMD | WRDE_SHOWERR) == 0) {
 		image = cairo_image_surface_create_from_png(result.we_wordv[0]);
 	}
