@@ -7,6 +7,9 @@ A lightweight, secure screen locker for Wayland compositors with visual authenti
 + Cairo Graphics: High-quality text and icon rendering with anti-aliasing
 + PAM Authentication: Secure user authentication using the system's PAM stack
 
+## Configuration
+We use toml to configure the locker the default config is as given in the assets folder
+
 ## Building
 *This has only been used on my system that runs arch, so if you need something else change is welcome.*
 ### Arch Linux

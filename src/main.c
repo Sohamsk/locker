@@ -3,7 +3,6 @@
 #include "draw.h"
 #include "ext-session-lock-v1-protocol.h"
 #include "state.h"
-#include "tomlc17.h"
 #include <assert.h>
 #include <bits/time.h>
 #include <security/_pam_types.h>
@@ -413,6 +412,8 @@ int main() {
 
 	//  NOTE: Clear all memory maybe make a function to clean shit when
 	//  exiting
+	free(state.wallpaper_path);
+	free(state.auth_state.username);
 	clearPasswordBuffer(&state.auth_state);
 	ext_session_lock_surface_v1_destroy(state.lock_surface);
 	ext_session_lock_manager_v1_destroy(state.lock_manager);

@@ -62,7 +62,7 @@ int init_pam(struct prog_state *state) {
 	if (user) {
 		state->auth_state.username = strdup(user);
 	} else {
-		state->auth_state.username = "unknown";
+		state->auth_state.username = strdup("unknown");
 	}
 
 	fprintf(stderr, "Current user: %s\n", state->auth_state.username);
